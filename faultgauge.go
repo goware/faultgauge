@@ -56,21 +56,23 @@ func (f *FaultGauge) IncrementSuccess() {
 }
 
 func (f *FaultGauge) FailRate() (float32, float32) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	currFailRate := float32(f.currFailCount) / float32(f.currSuccessCount+f.currFailCount)
 	prevFailRate := float32(f.prevFailCount) / float32(f.prevSuccessCount+f.prevFailCount)
 	return currFailRate, prevFailRate
 }
 
 func (f *FaultGauge) NumFail() uint64 {
-	return f.currFailCount
+	return atomic.LoadUint64(&f.currFailCount)
 }
 
 func (f *FaultGauge) NumSuccess() uint64 {
-	return f.currSuccessCount
+	return atomic.LoadUint64(&f.currSuccessCount)
 }
 
 func (f *FaultGauge) Counter() uint64 {
-	return f.currCounter
+	return atomic.LoadUint64(&f.currCounter)
 }
 
 func (f *FaultGauge) sample(fail bool) {
