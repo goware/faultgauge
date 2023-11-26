@@ -18,6 +18,7 @@ type Controller interface {
 
 	NumFail() uint64
 	NumSuccess() uint64
+	Counter() uint64
 }
 
 type FaultGauge struct {
@@ -28,6 +29,7 @@ type FaultGauge struct {
 	prevFailCount    uint64
 	currSuccessCount uint64
 	prevSuccessCount uint64
+	currCounter      uint64
 	mu               sync.Mutex
 }
 
@@ -67,6 +69,10 @@ func (f *FaultGauge) NumSuccess() uint64 {
 	return f.currSuccessCount
 }
 
+func (f *FaultGauge) Counter() uint64 {
+	return f.currCounter
+}
+
 func (f *FaultGauge) sample(fail bool) {
 	now := time.Now().UTC()
 	currWindow := now.Truncate(f.windowLength)
@@ -79,6 +85,7 @@ func (f *FaultGauge) sample(fail bool) {
 		f.currFailCount = 0
 		f.prevSuccessCount = f.currSuccessCount
 		f.currSuccessCount = 0
+		f.currCounter = 0
 	}
 	f.mu.Unlock()
 
@@ -87,4 +94,5 @@ func (f *FaultGauge) sample(fail bool) {
 	} else {
 		atomic.AddUint64(&f.currSuccessCount, 1)
 	}
+	atomic.AddUint64(&f.currCounter, 1)
 }
