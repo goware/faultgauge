@@ -16,9 +16,10 @@ type Controller interface {
 	IncrementFail()
 	IncrementSuccess()
 
-	NumFail() uint64
-	NumSuccess() uint64
-	Counter() uint64
+	// Stats for current and previous windows respectively.
+	NumFail() (uint64, uint64)
+	NumSuccess() (uint64, uint64)
+	Counter() (uint64, uint64)
 }
 
 type FaultGauge struct {
@@ -30,6 +31,7 @@ type FaultGauge struct {
 	currSuccessCount uint64
 	prevSuccessCount uint64
 	currCounter      uint64
+	prevCounter      uint64
 	mu               sync.Mutex
 }
 
@@ -63,16 +65,16 @@ func (f *FaultGauge) FailRate() (float32, float32) {
 	return currFailRate, prevFailRate
 }
 
-func (f *FaultGauge) NumFail() uint64 {
-	return atomic.LoadUint64(&f.currFailCount)
+func (f *FaultGauge) NumFail() (uint64, uint64) {
+	return atomic.LoadUint64(&f.currFailCount), atomic.LoadUint64(&f.prevFailCount)
 }
 
-func (f *FaultGauge) NumSuccess() uint64 {
-	return atomic.LoadUint64(&f.currSuccessCount)
+func (f *FaultGauge) NumSuccess() (uint64, uint64) {
+	return atomic.LoadUint64(&f.currSuccessCount), atomic.LoadUint64(&f.prevSuccessCount)
 }
 
-func (f *FaultGauge) Counter() uint64 {
-	return atomic.LoadUint64(&f.currCounter)
+func (f *FaultGauge) Counter() (uint64, uint64) {
+	return atomic.LoadUint64(&f.currCounter), atomic.LoadUint64(&f.prevCounter)
 }
 
 func (f *FaultGauge) sample(fail bool) {
@@ -87,6 +89,7 @@ func (f *FaultGauge) sample(fail bool) {
 		f.currFailCount = 0
 		f.prevSuccessCount = f.currSuccessCount
 		f.currSuccessCount = 0
+		f.prevCounter = f.currCounter
 		f.currCounter = 0
 	}
 	f.mu.Unlock()
