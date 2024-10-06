@@ -2,7 +2,6 @@ package faultgauge
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -32,7 +31,7 @@ type FaultGauge struct {
 	prevSuccessCount uint64
 	currCounter      uint64
 	prevCounter      uint64
-	mu               sync.Mutex
+	mu               sync.RWMutex
 }
 
 // NewFaultGauge creates a new gauge which samples the fail rate over the
@@ -50,38 +49,53 @@ var _ FailRate = (*FaultGauge)(nil)
 var _ Controller = (*FaultGauge)(nil)
 
 func (f *FaultGauge) IncrementFail() {
+	f.mu.Lock()
 	f.sample(true)
+	f.mu.Unlock()
 }
 
 func (f *FaultGauge) IncrementSuccess() {
+	f.mu.Lock()
 	f.sample(false)
+	f.mu.Unlock()
 }
 
 func (f *FaultGauge) FailRate() (float32, float32) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
 	currFailRate := float32(f.currFailCount) / float32(f.currSuccessCount+f.currFailCount)
 	prevFailRate := float32(f.prevFailCount) / float32(f.prevSuccessCount+f.prevFailCount)
+	f.mu.RUnlock()
 	return currFailRate, prevFailRate
 }
 
 func (f *FaultGauge) NumFail() (uint64, uint64) {
-	return atomic.LoadUint64(&f.currFailCount), atomic.LoadUint64(&f.prevFailCount)
+	f.mu.RLock()
+	currFailCount := f.currFailCount
+	prevFailCount := f.prevFailCount
+	f.mu.RUnlock()
+	return currFailCount, prevFailCount
 }
 
 func (f *FaultGauge) NumSuccess() (uint64, uint64) {
-	return atomic.LoadUint64(&f.currSuccessCount), atomic.LoadUint64(&f.prevSuccessCount)
+	f.mu.RLock()
+	currSuccessCount := f.currSuccessCount
+	prevSuccessCount := f.prevSuccessCount
+	f.mu.RUnlock()
+	return currSuccessCount, prevSuccessCount
 }
 
 func (f *FaultGauge) Counter() (uint64, uint64) {
-	return atomic.LoadUint64(&f.currCounter), atomic.LoadUint64(&f.prevCounter)
+	f.mu.RLock()
+	currCounter := f.currCounter
+	prevCounter := f.prevCounter
+	f.mu.RUnlock()
+	return currCounter, prevCounter
 }
 
 func (f *FaultGauge) sample(fail bool) {
 	now := time.Now().UTC()
 	currWindow := now.Truncate(f.windowLength)
 
-	f.mu.Lock()
 	if f.currWindow != currWindow {
 		f.prevWindow = f.currWindow
 		f.currWindow = currWindow
@@ -92,12 +106,11 @@ func (f *FaultGauge) sample(fail bool) {
 		f.prevCounter = f.currCounter
 		f.currCounter = 0
 	}
-	f.mu.Unlock()
 
 	if fail {
-		atomic.AddUint64(&f.currFailCount, 1)
+		f.currFailCount += 1
 	} else {
-		atomic.AddUint64(&f.currSuccessCount, 1)
+		f.currSuccessCount += 1
 	}
-	atomic.AddUint64(&f.currCounter, 1)
+	f.currCounter += 1
 }
